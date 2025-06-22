@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 const PdfPreview = dynamic(() => import('./PdfPreview'), { ssr: false });
 
@@ -20,6 +20,7 @@ export default function PdfForm() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatingPdf, setUpdatingPdf] = useState(false);
+  const [updateKey, setUpdateKey] = useState(0); // Force PDF preview refresh
 
   useEffect(() => {
     loadPdfFields();
@@ -44,10 +45,10 @@ export default function PdfForm() {
         throw new Error('Running on server side, PDF processing not available');
       }
       
-      // Try multiple PDF sources
+      // Try multiple PDF sources - prioritize test.pdf
       const pdfSources = [
         '/files/test.pdf',
-        '/test.pdf',
+        '/files/Real_Estate_Form.pdf',
         '/api/pdf'
       ];
       
@@ -60,7 +61,7 @@ export default function PdfForm() {
           const response = await fetch(source);
           
           console.log(`📊 ${source} - Status: ${response.status} ${response.statusText}`);
-          
+      
           if (!response.ok) {
             console.log(`❌ ${source} - HTTP error: ${response.status}`);
             continue;
@@ -100,7 +101,7 @@ export default function PdfForm() {
       }
       
       // Load PDF with pdf-lib
-      const { PDFDocument } = await import('pdf-lib');
+      const { PDFDocument, PDFRadioGroup } = await import('pdf-lib');
       const pdfDoc = await PDFDocument.load(pdfBytes);
       
       // Extract form fields
@@ -108,22 +109,57 @@ export default function PdfForm() {
       const fields = form.getFields();
       console.log(`📝 Found ${fields.length} form fields`);
       
+      const fieldsWithCoords = fields.map(field => {
+        const widgets = field.acroField.getWidgets();
+        let y = Infinity;
+        let x = Infinity;
+
+        // Use the first widget's position for sorting
+        if (widgets.length > 0) {
+            const rect = widgets[0].getRectangle();
+            y = rect.y;
+            x = rect.x;
+        }
+
+        return { field, y, x };
+      });
+
+      // Sort fields by position: top-to-bottom, then left-to-right
+      // pdf-lib's origin (0,0) is at the bottom-left corner of the page.
+      // So we sort by 'y' descending, and then 'x' ascending.
+      fieldsWithCoords.sort((a, b) => {
+          if (a.y > b.y) return -1;
+          if (a.y < b.y) return 1;
+          if (a.x < b.x) return -1;
+          if (a.x > b.x) return 1;
+          return 0;
+      });
+
+      const sortedFields = fieldsWithCoords.map(item => item.field);
       const extractedFields: FormField[] = [];
       
-      fields.forEach((field, index) => {
+      sortedFields.forEach((field) => {
         const fieldName = field.getName();
-        const fieldType = field.constructor.name.toLowerCase();
+        const fieldType = field.constructor.name;
         
         let type: FormField['type'] = 'text';
-        if (fieldType.includes('checkbox')) type = 'checkbox';
-        else if (fieldType.includes('radio')) type = 'radio';
-        else if (fieldType.includes('dropdown')) type = 'select';
+        let options: string[] | undefined;
+
+        if (fieldType.includes('PDFCheckBox')) {
+          type = 'checkbox';
+        } else if (fieldType.includes('PDFRadioGroup')) {
+          type = 'radio';
+          options = (field as any).getOptions().map((o: any) => o.toString());
+        } else if (fieldType.includes('PDFDropdown')) {
+          type = 'select';
+          options = (field as any).getOptions().map((o: any) => o.toString());
+        }
         
         extractedFields.push({
           name: fieldName,
           type,
           value: type === 'checkbox' ? false : '',
-          options: type === 'select' ? ['Option 1', 'Option 2', 'Option 3'] : undefined
+          options
         });
       });
       
@@ -139,31 +175,13 @@ export default function PdfForm() {
     }
   };
 
-  // Debounced PDF update function
-  const debouncedUpdatePdf = useCallback(
-    (() => {
-      let timeoutId: NodeJS.Timeout;
-      let isFirstUpdate = true;
-      return (data: Record<string, any>) => {
-        clearTimeout(timeoutId);
-        const delay = isFirstUpdate ? 1000 : 500; // Longer delay for first update
-        timeoutId = setTimeout(() => {
-          updatePdfPreview(data);
-          isFirstUpdate = false;
-        }, delay);
-      };
-    })(),
-    []
-  );
-
   const handleFieldChange = async (fieldName: string, value: any) => {
     const newFormData = { ...formData, [fieldName]: value };
     setFormData(newFormData);
     
     // Only update PDF if we have form fields loaded
     if (pdfFields.length > 0) {
-      // Use debounced update to prevent too many PDF updates
-      debouncedUpdatePdf(newFormData);
+      updatePdfPreview(newFormData);
     }
   };
 
@@ -179,7 +197,8 @@ export default function PdfForm() {
       // Dynamically import pdf-lib only on client side
       const { PDFDocument } = await import('pdf-lib');
       
-      const response = await fetch('/files/test.pdf');
+      // Try to load the same PDF that was successfully loaded initially
+      const response = await fetch(pdfUrl);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
@@ -210,10 +229,14 @@ export default function PdfForm() {
               textField.setText(value.toString());
             } else if (fieldType === 'PDFRadioGroup') {
               const radio = field as any;
-              radio.select(value.toString());
+              if (value) {
+                radio.select(value.toString());
+              }
             } else if (fieldType === 'PDFDropdown') {
               const dropdown = field as any;
-              dropdown.select(value.toString());
+              if (value) {
+                dropdown.select(value.toString());
+              }
             }
           }
         } catch (error) {
@@ -224,13 +247,16 @@ export default function PdfForm() {
       const filledPdfBytes = await pdfDoc.save();
       
       // Clean up previous blob URL to prevent memory leaks
-      if (filledPdfUrl) {
-        URL.revokeObjectURL(filledPdfUrl);
-      }
+      setFilledPdfUrl(prevUrl => {
+        if (prevUrl) {
+          URL.revokeObjectURL(prevUrl);
+        }
+        const blob = new Blob([filledPdfBytes], { type: 'application/pdf' });
+        return URL.createObjectURL(blob);
+      });
       
-      const blob = new Blob([filledPdfBytes], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      setFilledPdfUrl(url);
+      // Force PDF preview refresh by updating the key
+      setUpdateKey(prev => prev + 1);
       
     } catch (error) {
       console.error('Error updating PDF preview:', error);
@@ -256,6 +282,33 @@ export default function PdfForm() {
             <label htmlFor={name} className="text-sm font-semibold text-gray-800 cursor-pointer">
               {name}
             </label>
+          </div>
+        );
+      
+      case 'radio':
+        return (
+          <div key={name} className="space-y-2">
+            <label className="block text-sm font-semibold text-gray-800">
+              {name.replace(/_/g, ' ')}
+            </label>
+            <div className="flex items-center space-x-4">
+              {options?.map((option) => (
+                <div key={option} className="flex items-center">
+                  <input
+                    type="radio"
+                    id={`${name}-${option}`}
+                    name={name}
+                    value={option}
+                    checked={formData[name] === option}
+                    onChange={(e) => handleFieldChange(name, e.target.value)}
+                    className="w-4 h-4 text-blue-600 bg-white border-2 border-gray-300 focus:ring-2 focus:ring-blue-500"
+                  />
+                  <label htmlFor={`${name}-${option}`} className="ml-2 text-sm text-gray-700 cursor-pointer">
+                    {option}
+                  </label>
+                </div>
+              ))}
+            </div>
           </div>
         );
       
@@ -319,7 +372,7 @@ export default function PdfForm() {
           <div className="space-y-3 text-sm text-gray-600 bg-gray-50 p-4 rounded-lg">
             <p className="font-semibold text-gray-800">Troubleshooting:</p>
             <ul className="list-disc list-inside space-y-1 text-left">
-              <li>Check if test.pdf exists in public/files/</li>
+              <li>Check if Real_Estate_Form.pdf exists in public/files/</li>
               <li>Ensure the PDF file is not corrupted</li>
               <li>Try refreshing the page</li>
               <li>Check browser console for detailed errors</li>
@@ -361,22 +414,9 @@ export default function PdfForm() {
             <h2 className="text-xl font-semibold text-gray-900">PDF Preview</h2>
           </div>
           <div className="flex-1 overflow-auto bg-gray-100 p-4">
-            {filledPdfUrl ? (
-              <div className="bg-white rounded-lg shadow-md overflow-hidden">
-                <PdfPreview file={filledPdfUrl} />
-              </div>
-            ) : pdfUrl ? (
-              <div className="bg-white rounded-lg shadow-md overflow-hidden">
-                <PdfPreview file={pdfUrl} />
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-full text-gray-500 bg-white rounded-lg shadow-md">
-                <div className="text-center">
-                  <div className="text-lg font-medium">PDF preview not available</div>
-                  <div className="text-sm mt-2">Fill out the form to see the preview</div>
-                </div>
-              </div>
-            )}
+            <div className="bg-white rounded-lg shadow-md overflow-hidden">
+              <PdfPreview file={filledPdfUrl || pdfUrl} key={updateKey} />
+            </div>
           </div>
         </div>
       </div>

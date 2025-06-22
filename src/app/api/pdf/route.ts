@@ -4,9 +4,10 @@ import { join } from 'path';
 
 export async function GET(request: NextRequest) {
   try {
-    // Check multiple possible paths
+    // Check multiple possible paths - prioritize test.pdf
     const possiblePaths = [
       join(process.cwd(), 'public', 'files', 'test.pdf'),
+      join(process.cwd(), 'public', 'files', 'Real_Estate_Form.pdf'),
       join(process.cwd(), 'public', 'test.pdf'),
       join(process.cwd(), 'test.pdf'),
     ];
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
       console.error('❌ API: PDF file not found in any of the expected locations');
       console.log('🔍 API: Checked paths:', possiblePaths);
       return NextResponse.json(
-        { error: 'PDF file not found' },
+        { error: 'PDF file not found. Please ensure test.pdf exists in public/files/' },
         { status: 404 }
       );
     }

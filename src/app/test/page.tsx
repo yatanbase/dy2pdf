@@ -1,41 +1,54 @@
 'use client';
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
+
+const PdfPreview = dynamic(() => import('../components/PdfPreview'), { ssr: false });
 
 export default function TestPage() {
-  const [result, setResult] = useState<any>(null);
+  const [selectedPdf, setSelectedPdf] = useState<string>('/files/test.pdf');
   const [loading, setLoading] = useState(false);
+  const [testResult, setTestResult] = useState<any>(null);
 
-  const testApiRoute = async () => {
+  const testPdfLoad = async () => {
     setLoading(true);
     try {
-      console.log('🧪 Testing API route...');
-      const response = await fetch('/api/pdf');
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      console.log('🧪 Testing PDF load...');
+      
+      const response = await fetch(selectedPdf);
+      
+      console.log(`📊 ${selectedPdf} - Status:`, response.status);
+      console.log(`📊 ${selectedPdf} - StatusText:`, response.statusText);
+      console.log(`📊 ${selectedPdf} - Headers:`, Object.fromEntries(response.headers.entries()));
+      
+      if (response.ok) {
+        const arrayBuffer = await response.arrayBuffer();
+        console.log(`📄 ${selectedPdf} - Size:`, arrayBuffer.byteLength, 'bytes');
+        
+        if (arrayBuffer.byteLength > 0) {
+          setTestResult({
+            success: true,
+            url: selectedPdf,
+            size: arrayBuffer.byteLength,
+            status: response.status,
+            contentType: response.headers.get('content-type')
+          });
+        } else {
+          setTestResult({
+            success: false,
+            error: 'Empty file received'
+          });
+        }
+      } else {
+        setTestResult({
+          success: false,
+          error: `HTTP ${response.status}: ${response.statusText}`
+        });
       }
-
-      const arrayBuffer = await response.arrayBuffer();
-      console.log('📄 API: Received', arrayBuffer.byteLength, 'bytes');
-
-      // Check PDF header
-      const firstBytes = new Uint8Array(arrayBuffer.slice(0, 8));
-      const header = String.fromCharCode(...firstBytes);
-      console.log('🔍 API: File header:', header);
-
-      setResult({
-        success: true,
-        size: arrayBuffer.byteLength,
-        header: header,
-        isPdf: header.startsWith('%PDF'),
-        status: response.status
-      });
-
+      
     } catch (error) {
-      console.error('❌ API test failed:', error);
-      setResult({
+      console.error('❌ Test failed:', error);
+      setTestResult({
         success: false,
         error: error instanceof Error ? error.message : String(error)
       });
@@ -45,47 +58,94 @@ export default function TestPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 p-8">
-      <div className="max-w-2xl mx-auto">
-        <div className="bg-white rounded-xl shadow-lg p-8">
-          <h1 className="text-3xl font-bold mb-6 text-gray-900 border-b border-gray-200 pb-4">PDF API Test</h1>
-          
-          <button 
-            onClick={testApiRoute}
-            disabled={loading}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium shadow-md"
-          >
-            {loading ? (
-              <div className="flex items-center space-x-2">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                <span>Testing...</span>
+    <div className="p-8 bg-gray-50 min-h-screen">
+      <div className="max-w-6xl mx-auto">
+        <h1 className="text-3xl font-bold mb-6 text-gray-900">PDF Test Page</h1>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Test Controls */}
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <h2 className="text-xl font-semibold mb-4">PDF Loading Test</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select PDF to test:
+                </label>
+                <select
+                  value={selectedPdf}
+                  onChange={(e) => setSelectedPdf(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="/files/test.pdf">test.pdf</option>
+                  <option value="/files/Real_Estate_Form.pdf">Real_Estate_Form.pdf</option>
+                  <option value="/api/pdf">API Route</option>
+                </select>
               </div>
-            ) : (
-              'Test API Route'
-            )}
-          </button>
+              
+              <button 
+                onClick={testPdfLoad}
+                disabled={loading}
+                className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
+              >
+                {loading ? 'Testing...' : 'Test PDF Loading'}
+              </button>
 
-          {result && (
-            <div className="mt-6 p-6 rounded-lg border-2">
-              <h2 className="font-bold mb-4 text-lg">Result:</h2>
-              {result.success ? (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <div className="text-green-800 font-semibold mb-3">✅ Test Successful:</div>
-                  <div className="space-y-2 text-sm text-green-700">
-                    <div><span className="font-medium">Status:</span> {result.status}</div>
-                    <div><span className="font-medium">Size:</span> {result.size.toLocaleString()} bytes</div>
-                    <div><span className="font-medium">Header:</span> <code className="bg-green-100 px-2 py-1 rounded">{result.header}</code></div>
-                    <div><span className="font-medium">Is PDF:</span> {result.isPdf ? '✅ Yes' : '❌ No'}</div>
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  <div className="text-red-800 font-semibold mb-2">❌ Test Failed:</div>
-                  <div className="text-red-700">{result.error}</div>
+              {testResult && (
+                <div className={`p-4 rounded-lg border ${
+                  testResult.success 
+                    ? 'bg-green-50 border-green-200 text-green-800' 
+                    : 'bg-red-50 border-red-200 text-red-800'
+                }`}>
+                  <h3 className="font-semibold mb-2">
+                    {testResult.success ? '✅ Success!' : '❌ Failed'}
+                  </h3>
+                  {testResult.success ? (
+                    <div className="text-sm space-y-1">
+                      <div><strong>URL:</strong> {testResult.url}</div>
+                      <div><strong>Size:</strong> {testResult.size} bytes</div>
+                      <div><strong>Status:</strong> {testResult.status}</div>
+                      <div><strong>Content-Type:</strong> {testResult.contentType}</div>
+                    </div>
+                  ) : (
+                    <div className="text-sm">
+                      <strong>Error:</strong> {testResult.error}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
+          </div>
+
+          {/* PDF Preview */}
+          <div className="bg-white rounded-lg shadow-md overflow-hidden">
+            <div className="p-4 border-b border-gray-200">
+              <h2 className="text-xl font-semibold">PDF Preview</h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Current: {selectedPdf}
+              </p>
+            </div>
+            <div className="h-96">
+              <PdfPreview file={selectedPdf} />
+            </div>
+          </div>
+        </div>
+
+        {/* Troubleshooting Info */}
+        <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-yellow-800 mb-3">Troubleshooting</h3>
+          <div className="text-sm text-yellow-700 space-y-2">
+            <p><strong>Common Issues:</strong></p>
+            <ul className="list-disc list-inside space-y-1 ml-4">
+              <li>IDM (Internet Download Manager) intercepting requests - disable for localhost</li>
+              <li>PDF files not found in public/files/ directory</li>
+              <li>Browser PDF viewer not supported - use the PDF.js viewer above</li>
+              <li>CORS issues with local development</li>
+            </ul>
+            <p className="mt-3">
+              <strong>Solution:</strong> The PDF.js viewer above should work regardless of browser PDF support.
+            </p>
+          </div>
         </div>
       </div>
     </div>
