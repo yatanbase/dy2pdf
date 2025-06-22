@@ -11,12 +11,6 @@ export default function TestPage() {
     try {
       console.log('🧪 Testing API route...');
       const response = await fetch('/api/pdf');
-      
-      console.log('📊 API Response:', {
-        status: response.status,
-        statusText: response.statusText,
-        headers: Object.fromEntries(response.headers.entries())
-      });
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -51,34 +45,49 @@ export default function TestPage() {
   };
 
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold mb-4">PDF API Test</h1>
-      
-      <button 
-        onClick={testApiRoute}
-        disabled={loading}
-        className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-400"
-      >
-        {loading ? 'Testing...' : 'Test API Route'}
-      </button>
+    <div className="min-h-screen bg-slate-100 p-8">
+      <div className="max-w-2xl mx-auto">
+        <div className="bg-white rounded-xl shadow-lg p-8">
+          <h1 className="text-3xl font-bold mb-6 text-gray-900 border-b border-gray-200 pb-4">PDF API Test</h1>
+          
+          <button 
+            onClick={testApiRoute}
+            disabled={loading}
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium shadow-md"
+          >
+            {loading ? (
+              <div className="flex items-center space-x-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                <span>Testing...</span>
+              </div>
+            ) : (
+              'Test API Route'
+            )}
+          </button>
 
-      {result && (
-        <div className="mt-4 p-4 bg-gray-100 rounded">
-          <h2 className="font-bold mb-2">Result:</h2>
-          {result.success ? (
-            <div className="text-sm">
-              <div><strong>Status:</strong> {result.status}</div>
-              <div><strong>Size:</strong> {result.size} bytes</div>
-              <div><strong>Header:</strong> {result.header}</div>
-              <div><strong>Is PDF:</strong> {result.isPdf ? '✅ Yes' : '❌ No'}</div>
-            </div>
-          ) : (
-            <div className="text-red-600">
-              <strong>Error:</strong> {result.error}
+          {result && (
+            <div className="mt-6 p-6 rounded-lg border-2">
+              <h2 className="font-bold mb-4 text-lg">Result:</h2>
+              {result.success ? (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="text-green-800 font-semibold mb-3">✅ Test Successful:</div>
+                  <div className="space-y-2 text-sm text-green-700">
+                    <div><span className="font-medium">Status:</span> {result.status}</div>
+                    <div><span className="font-medium">Size:</span> {result.size.toLocaleString()} bytes</div>
+                    <div><span className="font-medium">Header:</span> <code className="bg-green-100 px-2 py-1 rounded">{result.header}</code></div>
+                    <div><span className="font-medium">Is PDF:</span> {result.isPdf ? '✅ Yes' : '❌ No'}</div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="text-red-800 font-semibold mb-2">❌ Test Failed:</div>
+                  <div className="text-red-700">{result.error}</div>
+                </div>
+              )}
             </div>
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 } 

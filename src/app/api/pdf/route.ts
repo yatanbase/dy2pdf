@@ -4,13 +4,11 @@ import { join } from 'path';
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('📁 API: PDF request received');
-    
     // Check multiple possible paths
     const possiblePaths = [
-      join(process.cwd(), 'public', 'files', 'agent.pdf'),
-      join(process.cwd(), 'public', 'files', 'Agent to Agent.pdf'),
-      join(process.cwd(), 'agent.pdf'),
+      join(process.cwd(), 'public', 'files', 'test.pdf'),
+      join(process.cwd(), 'public', 'test.pdf'),
+      join(process.cwd(), 'test.pdf'),
     ];
 
     let pdfPath = null;
@@ -31,7 +29,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log('📄 API: Reading PDF file...');
     const pdfBuffer = readFileSync(pdfPath);
     console.log('📄 API: PDF size:', pdfBuffer.length, 'bytes');
 

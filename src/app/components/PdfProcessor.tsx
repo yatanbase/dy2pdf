@@ -12,7 +12,7 @@ export interface FormField {
 export class PdfProcessor {
   static async extractFields(): Promise<FormField[]> {
     try {
-      const response = await fetch('/files/agent.pdf');
+      const response = await fetch('/files/test.pdf');
       const pdfBytes = await response.arrayBuffer();
       
       const pdfDoc = await PDFDocument.load(pdfBytes);

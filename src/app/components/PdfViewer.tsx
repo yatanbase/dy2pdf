@@ -21,9 +21,9 @@ export default function PdfViewer() {
     setAttempts([]);
 
     const urls = [
-      '/agent.pdf',
-      '/files/agent.pdf', 
-      '/files/Agent to Agent.pdf',
+      '/test.pdf',
+      '/files/test.pdf', 
+      '/files/test.pdf',
       '/api/pdf'
     ];
 

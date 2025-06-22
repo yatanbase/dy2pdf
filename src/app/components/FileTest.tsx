@@ -15,12 +15,7 @@ export default function FileTest() {
       console.log('🧪 Testing file access...');
       
       const response = await fetch('/api/pdf');
-      console.log('📊 Response:', {
-        status: response.status,
-        statusText: response.statusText,
-        headers: Object.fromEntries(response.headers.entries())
-      });
-
+      
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
@@ -47,19 +42,23 @@ export default function FileTest() {
   };
 
   return (
-    <div className="p-4 bg-gray-100 rounded-lg">
-      <h3 className="text-lg font-bold mb-2">File Access Test</h3>
+    <div className="p-6 bg-white rounded-xl shadow-lg border border-gray-200">
+      <h3 className="text-xl font-bold mb-4 text-gray-900 border-b border-gray-200 pb-2">File Access Test</h3>
       {error && (
-        <div className="text-red-600 mb-2">
-          <strong>Error:</strong> {error}
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <div className="text-red-800 font-semibold mb-1">Error:</div>
+          <div className="text-red-700 text-sm">{error}</div>
         </div>
       )}
       {fileInfo && (
-        <div className="text-sm">
-          <div><strong>Status:</strong> {fileInfo.status}</div>
-          <div><strong>Size:</strong> {fileInfo.size} bytes</div>
-          <div><strong>Header:</strong> {fileInfo.header}</div>
-          <div><strong>Is PDF:</strong> {fileInfo.isPdf ? '✅ Yes' : '❌ No'}</div>
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="text-green-800 font-semibold mb-3">✅ Test Results:</div>
+          <div className="space-y-2 text-sm text-green-700">
+            <div><span className="font-medium">Status:</span> {fileInfo.status}</div>
+            <div><span className="font-medium">Size:</span> {fileInfo.size.toLocaleString()} bytes</div>
+            <div><span className="font-medium">Header:</span> <code className="bg-green-100 px-2 py-1 rounded">{fileInfo.header}</code></div>
+            <div><span className="font-medium">Is PDF:</span> {fileInfo.isPdf ? '✅ Yes' : '❌ No'}</div>
+          </div>
         </div>
       )}
     </div>
