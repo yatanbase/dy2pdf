@@ -21,10 +21,20 @@ export default function PdfForm() {
   const [error, setError] = useState<string | null>(null);
   const [updatingPdf, setUpdatingPdf] = useState(false);
   const [updateKey, setUpdateKey] = useState(0); // Force PDF preview refresh
+  const [logoImage, setLogoImage] = useState<{bytes: ArrayBuffer, type: 'image/png' | 'image/jpeg' } | null>(null);
 
   useEffect(() => {
     loadPdfFields();
   }, []);
+
+  useEffect(() => {
+    // When logo is updated, trigger a PDF update.
+    // We only want this to run when the logoImage itself changes.
+    if (logoImage) {
+      updatePdfPreview(formData);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logoImage]);
 
   // Cleanup effect to dispose of blob URLs
   useEffect(() => {
@@ -175,6 +185,23 @@ export default function PdfForm() {
     }
   };
 
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+        if (file.type === 'image/png' || file.type === 'image/jpeg') {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                if (event.target?.result) {
+                    setLogoImage({ bytes: event.target.result as ArrayBuffer, type: file.type as 'image/png' | 'image/jpeg' });
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        } else {
+            alert('Please select a PNG or JPEG image.');
+        }
+    }
+  };
+
   const handleFieldChange = async (fieldName: string, value: any) => {
     const newFormData = { ...formData, [fieldName]: value };
     setFormData(newFormData);
@@ -208,6 +235,30 @@ export default function PdfForm() {
       const pdfDoc = await PDFDocument.load(pdfBytes);
       const form = pdfDoc.getForm();
       
+      if (logoImage) {
+        let embeddedImage;
+        if (logoImage.type === 'image/png') {
+            embeddedImage = await pdfDoc.embedPng(logoImage.bytes);
+        } else { // jpeg
+            embeddedImage = await pdfDoc.embedJpg(logoImage.bytes);
+        }
+        
+        const page = pdfDoc.getPage(0);
+        const { width: pageWidth, height: pageHeight } = page.getSize();
+        
+        const maxWidth = 150;
+        const maxHeight = 50;
+        
+        const logoDims = embeddedImage.scaleToFit(maxWidth, maxHeight);
+
+        page.drawImage(embeddedImage, {
+            x: (pageWidth - logoDims.width)/ 2,
+            y: pageHeight - 52 - logoDims.height, // Place near top-center
+            width: logoDims.width,
+            height: logoDims.height,
+        });
+      }
+
       // Fill form fields
       Object.entries(data).forEach(([fieldName, value]) => {
         try {
@@ -395,6 +446,18 @@ export default function PdfForm() {
       <div className="w-1/2 p-8 overflow-y-auto bg-white shadow-lg">
         <div className="max-w-md mx-auto">
           <h1 className="text-3xl font-bold mb-8 text-gray-900 border-b border-gray-200 pb-4">PDF Form</h1>
+          <div className="space-y-2 mb-6">
+            <label htmlFor="logo-upload" className="block text-sm font-semibold text-gray-800">
+                Logo
+            </label>
+            <input
+                type="file"
+                id="logo-upload"
+                accept="image/png, image/jpeg"
+                onChange={handleLogoChange}
+                className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+            />
+          </div>
           <div className="space-y-6">
             {pdfFields.length > 0 ? (
               pdfFields.map(renderFormField)
